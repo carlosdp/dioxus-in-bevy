@@ -1,0 +1,7 @@
+**/target
+examples/*/target
+examples/*/Cargo.lock
+.fastembed_cache
+.env*
+
+.DS_Store

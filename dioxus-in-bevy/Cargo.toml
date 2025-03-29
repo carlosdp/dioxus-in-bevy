@@ -1,0 +1,25 @@
+[package]
+name = "dioxus-in-bevy"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+web = ["dioxus-web", "dioxus-cli-config", "wasm-bindgen", "web-sys", "js-sys"]
+
+[dependencies]
+dioxus-in-bevy-macros = { path = "../dioxus-in-bevy-macros" }
+paste = "1"
+bevy = "0.15"
+dioxus = "0.6"
+dioxus-core = "0.6"
+dioxus-history = "0.6"
+tracing = "0.1"
+futures-lite = "2.6"
+inventory = "0.3"
+generational-box = "0.6"
+
+dioxus-web = { version = "0.6", features = ["document"], optional = true }
+dioxus-cli-config = { version = "0.6", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+web-sys = { version = "0.3", optional = true }
+js-sys = { version = "0.3", optional = true }
