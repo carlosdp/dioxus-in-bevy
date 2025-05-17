@@ -9,7 +9,7 @@ web = ["dioxus-web", "dioxus-cli-config", "wasm-bindgen", "web-sys", "js-sys"]
 [dependencies]
 dioxus-in-bevy-macros = { path = "../dioxus-in-bevy-macros" }
 paste = "1"
-bevy = "0.15"
+bevy = "0.16"
 dioxus = "0.6"
 dioxus-core = "0.6"
 dioxus-history = "0.6"

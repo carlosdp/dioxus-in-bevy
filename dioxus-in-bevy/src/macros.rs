@@ -63,7 +63,7 @@ macro_rules! elements {
                                             }
                                         });
                                         let converted_value: $attr_type = $crate::component::convert_attribute(value);
-                                        world.run_system_with_input(system_id, converted_value).expect("Attribute mutation failed");
+                                        world.run_system_with(system_id, converted_value).expect("Attribute mutation failed");
                                     }),
                                 )*
                             ],

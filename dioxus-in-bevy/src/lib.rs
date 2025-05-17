@@ -332,7 +332,7 @@ impl WriteMutations for WorldRenderer {
 
         self.command(move |world| {
             let reference_child = id_to_entity(world, root_entity, id);
-            let parent = world.get::<Parent>(reference_child).unwrap().get();
+            let parent = world.get::<ChildOf>(reference_child).unwrap().parent();
 
             let mut stack = stack.lock().unwrap();
             let len = stack.len();
@@ -343,7 +343,7 @@ impl WriteMutations for WorldRenderer {
 
             // Reorder children to ensure newly added ones appear after the reference child
             let mut children = world.get_mut::<Children>(parent).unwrap();
-            let ref_idx = children.iter().position(|&c| c == reference_child).unwrap();
+            let ref_idx = children.iter().position(|c| c == reference_child).unwrap();
             let child_count = children.len();
 
             // Move each new child to position after reference_child
@@ -371,7 +371,7 @@ impl WriteMutations for WorldRenderer {
 
         self.command(move |world| {
             let reference_child = id_to_entity(world, root_entity, id);
-            let parent = world.get::<Parent>(reference_child).unwrap().get();
+            let parent = world.get::<ChildOf>(reference_child).unwrap().parent();
 
             let mut stack = stack.lock().unwrap();
             let len = stack.len();
@@ -382,7 +382,7 @@ impl WriteMutations for WorldRenderer {
 
             // Reorder children so the newly added ones appear just before the reference child
             let mut children = world.get_mut::<Children>(parent).unwrap();
-            let ref_idx = children.iter().position(|&c| c == reference_child).unwrap();
+            let ref_idx = children.iter().position(|c| c == reference_child).unwrap();
             let child_count = children.len();
 
             for (i, _) in new_children.iter().enumerate() {
@@ -543,11 +543,11 @@ impl WriteMutations for WorldRenderer {
 
         self.command(move |world| {
             let entity = id_to_entity(world, root_entity, id);
-            let parent = world.get::<Parent>(entity).unwrap().get();
+            let parent = world.get::<ChildOf>(entity).unwrap().parent();
 
             // Remove the entity from the parent's children
             let children = world.get_mut::<Children>(parent).unwrap();
-            let idx = children.iter().position(|&c| c == entity).unwrap();
+            let idx = children.iter().position(|c| c == entity).unwrap();
             world.entity_mut(parent).remove_children(&[entity]);
 
             // Add the new children from the stack
@@ -590,11 +590,11 @@ impl WriteMutations for WorldRenderer {
             }
             let node = *node;
 
-            let parent = world.get::<Parent>(node).unwrap().get();
+            let parent = world.get::<ChildOf>(node).unwrap().parent();
 
             // Remove the entity from the parent's children
             let children = world.get_mut::<Children>(parent).unwrap();
-            let idx = children.iter().position(|&c| c == node).unwrap();
+            let idx = children.iter().position(|c| c == node).unwrap();
             world.entity_mut(parent).remove_children(&[node]);
 
             // Add the new children from the stack
