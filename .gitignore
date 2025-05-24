@@ -3,5 +3,6 @@ examples/*/target
 examples/*/Cargo.lock
 .fastembed_cache
 .env*
+dist/
 
 .DS_Store

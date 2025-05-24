@@ -202,6 +202,15 @@ Check the `examples/` directory for more detailed examples:
 - `blank.rs`: Basic setup with custom elements and events
 - `using_signals.rs`: Using Dioxus signals for reactive state
 
+### Running Examples on Web
+
+You can run any of the examples on web using WASM easily by using [Trunk](https://trunkrs.dev/):
+
+```bash
+cd dioxus-in-bevy # Must be in the dioxus-in-bevy crate folder that has the index.html
+trunk serve --example using_signals
+```
+
 ## Contributing
 
 Contributions welcome! Just open a PR 🙂
