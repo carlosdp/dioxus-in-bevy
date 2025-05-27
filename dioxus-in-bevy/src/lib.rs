@@ -10,7 +10,7 @@ mod renderers;
 
 pub mod prelude {
     #[cfg(feature = "web")]
-    pub use super::WebComponent;
+    pub use super::WebNode;
     pub use super::{DioxusPlugin, DioxusRoot};
     pub use crate::component::attr;
     pub use crate::macros::elements;
@@ -51,17 +51,17 @@ pub struct DioxusRoot {
 #[cfg(feature = "web")]
 #[derive(Default, Clone)]
 pub struct DioxusWebRoot {
-    pub(crate) components: Arc<Mutex<Option<Signal<HashMap<Entity, WebComponent>>>>>,
+    pub(crate) components: Arc<Mutex<Option<Signal<HashMap<Entity, WebNode>>>>>,
 }
 
 #[cfg(feature = "web")]
 #[derive(Clone, Component)]
 #[require(Node)]
-pub struct WebComponent {
+pub struct WebNode {
     pub component: Arc<dyn (Fn() -> Element) + Send + Sync + 'static>,
 }
 
-impl WebComponent {
+impl WebNode {
     pub fn new(component: impl Fn() -> Element + Send + Sync + 'static) -> Self {
         Self {
             component: Arc::new(component),
@@ -283,7 +283,7 @@ fn setup_web(web_root: NonSendMut<DioxusWebRoot>, windows: Query<&Window>) {
         }
     });
     vdom.provide_root_context(web_root.clone());
-    let components_signal: Signal<HashMap<Entity, WebComponent>> =
+    let components_signal: Signal<HashMap<Entity, WebNode>> =
         vdom.in_runtime(|| Signal::new_in_scope(HashMap::new(), ScopeId::ROOT));
     *web_root.components.lock().unwrap() = Some(components_signal);
     // note(carlos): I don't love this, and this sucks because we can't "shut down"
@@ -293,8 +293,8 @@ fn setup_web(web_root: NonSendMut<DioxusWebRoot>, windows: Query<&Window>) {
 
 fn synchronize_web_components(
     root: NonSendMut<DioxusWebRoot>,
-    added: Query<(Entity, &WebComponent), Added<WebComponent>>,
-    mut removed: RemovedComponents<WebComponent>,
+    added: Query<(Entity, &WebNode), Added<WebNode>>,
+    mut removed: RemovedComponents<WebNode>,
 ) {
     for (entity, component) in &added {
         root.components
