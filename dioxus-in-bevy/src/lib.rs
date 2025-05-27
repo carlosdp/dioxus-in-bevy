@@ -9,6 +9,8 @@ mod history;
 mod renderers;
 
 pub mod prelude {
+    #[cfg(feature = "web")]
+    pub use super::WebComponent;
     pub use super::{DioxusPlugin, DioxusRoot};
     pub use crate::component::attr;
     pub use crate::macros::elements;
@@ -27,42 +29,49 @@ use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 use bevy::prelude::*;
 use component::ComponentBuilder;
+#[cfg(feature = "web")]
+use dioxus::prelude::*;
 use dioxus_core::{Element, ScopeId, VirtualDom};
 
 thread_local! {
     pub static RENDERER_CONTEXT: RefCell<DioxusRendererContext> = RefCell::new(DioxusRendererContext::default());
 }
 
-pub enum DioxusRenderer {
-    Bevy,
-    #[cfg(feature = "web")]
-    Web,
-}
-
 #[derive(Component)]
 pub struct DioxusRoot {
-    pub(crate) renderer: DioxusRenderer,
     pub(crate) root: fn() -> Element,
     pub(crate) element_map: HashMap<dioxus_core::ElementId, Entity>,
+}
+
+#[cfg(feature = "web")]
+#[derive(Default, Clone)]
+pub struct DioxusWebRoot {
+    pub(crate) components: Arc<Mutex<Option<Signal<HashMap<Entity, WebComponent>>>>>,
+}
+
+#[cfg(feature = "web")]
+#[derive(Clone, Component)]
+#[require(Node)]
+pub struct WebComponent {
+    pub component: Arc<dyn (Fn() -> Element) + Send + Sync + 'static>,
+}
+
+impl WebComponent {
+    pub fn new(component: impl Fn() -> Element + Send + Sync + 'static) -> Self {
+        Self {
+            component: Arc::new(component),
+        }
+    }
 }
 
 impl DioxusRoot {
     pub fn new(root: fn() -> Element) -> Self {
         Self {
-            renderer: DioxusRenderer::Bevy,
-            root,
-            element_map: HashMap::new(),
-        }
-    }
-
-    #[cfg(feature = "web")]
-    pub fn web(root: fn() -> Element) -> Self {
-        Self {
-            renderer: DioxusRenderer::Web,
             root,
             element_map: HashMap::new(),
         }
@@ -177,6 +186,13 @@ impl Plugin for DioxusPlugin {
             .init_non_send_resource::<EventChannels>()
             .insert_resource(DioxusBuilders(builders))
             .add_systems(Update, (setup, render, process_commands));
+
+        #[cfg(feature = "web")]
+        {
+            app.init_non_send_resource::<DioxusWebRoot>()
+                .add_systems(Startup, setup_web)
+                .add_systems(Update, synchronize_web_components);
+        }
     }
 }
 
@@ -184,72 +200,118 @@ fn setup(
     mut query: Query<(Entity, &mut DioxusRoot), Added<DioxusRoot>>,
     mut commands: Commands,
     mut dioxus_commands: NonSendMut<DioxusCommands>,
-    windows: Query<&Window>,
 ) {
     for (entity, mut dioxus_root) in query.iter_mut() {
         let root = dioxus_root.root;
 
-        match dioxus_root.renderer {
-            DioxusRenderer::Bevy => {
-                dioxus_root
-                    .element_map
-                    .insert(dioxus_core::ElementId(0), entity);
-                commands.entity(entity).insert(Node::default());
+        dioxus_root
+            .element_map
+            .insert(dioxus_core::ElementId(0), entity);
+        commands.entity(entity).insert(Node::default());
 
-                let mut vdom = VirtualDom::new(root);
-                vdom.in_runtime(init_history);
-                let mut renderer = WorldRenderer::new(entity);
+        let mut vdom = VirtualDom::new(root);
+        vdom.in_runtime(init_history);
+        let mut renderer = WorldRenderer::new(entity);
 
-                vdom.rebuild(&mut renderer);
+        vdom.rebuild(&mut renderer);
 
-                dioxus_commands.extend(renderer.drain_commands());
+        dioxus_commands.extend(renderer.drain_commands());
 
-                RENDERER_CONTEXT.with_borrow_mut(|context| {
-                    context.renderers.insert(entity, (vdom, renderer));
-                });
-            }
-            #[cfg(feature = "web")]
-            DioxusRenderer::Web => {
-                use web_sys::window;
+        RENDERER_CONTEXT.with_borrow_mut(|context| {
+            context.renderers.insert(entity, (vdom, renderer));
+        });
+    }
+}
 
-                let bevy_window = windows.single().unwrap();
-                let canvas = if let Some(ref canvas_selector) = bevy_window.canvas {
-                    window()
-                        .unwrap()
-                        .document()
-                        .unwrap()
-                        .query_selector(&canvas_selector)
-                        .expect("Failed to query canvas selector")
-                        .unwrap()
-                } else {
-                    window()
-                        .unwrap()
-                        .document()
-                        .unwrap()
-                        .query_selector("canvas")
-                        .expect("Failed to query canvas selector")
-                        .unwrap()
-                };
-                let ui_root = canvas.parent_node().unwrap();
-                let node = window()
-                    .unwrap()
-                    .document()
-                    .unwrap()
-                    .create_element("div")
-                    .unwrap();
-                node.set_attribute(
-                    "style",
-                    "width: 100%; height: 100%; position: absolute; top: 0; left: 0;",
-                )
-                .unwrap();
-                ui_root.append_child(&node).unwrap();
+#[cfg(feature = "web")]
+fn setup_web(web_root: NonSendMut<DioxusWebRoot>, windows: Query<&Window>) {
+    use dioxus::signals::Signal;
+    use web_sys::window;
 
-                let config = dioxus_web::Config::new().rootelement(node);
-                // note(carlos): I don't love this, and this sucks because we can't "shut down"
-                // the UI really. But the web dom stuff is all private.
-                dioxus_web::launch::launch_cfg(root, config);
+    let bevy_window = windows.single().unwrap();
+    let canvas = if let Some(ref canvas_selector) = bevy_window.canvas {
+        window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .query_selector(&canvas_selector)
+            .expect("Failed to query canvas selector")
+            .unwrap()
+    } else {
+        window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .query_selector("canvas")
+            .expect("Failed to query canvas selector")
+            .unwrap()
+    };
+    let ui_root = canvas.parent_node().unwrap();
+    let node = window()
+        .unwrap()
+        .document()
+        .unwrap()
+        .create_element("div")
+        .unwrap();
+    node.set_attribute(
+        "style",
+        "width: 100%; height: 100%; position: absolute; top: 0; left: 0;",
+    )
+    .unwrap();
+    ui_root.append_child(&node).unwrap();
+
+    let config = dioxus_web::Config::new().rootelement(node);
+    let vdom = VirtualDom::new(move || {
+        let web_root = use_context::<DioxusWebRoot>();
+
+        let components = web_root
+            .components
+            .lock()
+            .unwrap()
+            .unwrap()
+            .read()
+            .iter()
+            .map(|(_, comp)| comp.component.clone())
+            .collect::<Vec<_>>();
+
+        rsx! {
+            div {
+                for component in components {
+                    {component()}
+                }
             }
         }
+    });
+    vdom.provide_root_context(web_root.clone());
+    let components_signal: Signal<HashMap<Entity, WebComponent>> =
+        vdom.in_runtime(|| Signal::new_in_scope(HashMap::new(), ScopeId::ROOT));
+    *web_root.components.lock().unwrap() = Some(components_signal);
+    // note(carlos): I don't love this, and this sucks because we can't "shut down"
+    // the UI really. But the web dom stuff is all private.
+    dioxus_web::launch::launch_virtual_dom(vdom, config);
+}
+
+fn synchronize_web_components(
+    root: NonSendMut<DioxusWebRoot>,
+    added: Query<(Entity, &WebComponent), Added<WebComponent>>,
+    mut removed: RemovedComponents<WebComponent>,
+) {
+    for (entity, component) in &added {
+        root.components
+            .lock()
+            .unwrap()
+            .unwrap()
+            .write()
+            .insert(entity, component.clone());
+    }
+
+    for entity in removed.read() {
+        root.components
+            .lock()
+            .unwrap()
+            .unwrap()
+            .write()
+            .remove(&entity);
     }
 }
 
