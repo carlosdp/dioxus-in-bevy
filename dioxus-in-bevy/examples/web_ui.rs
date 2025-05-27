@@ -17,9 +17,21 @@ fn setup(mut commands: Commands) {
 
 #[component]
 fn App() -> Element {
+    let text = use_bevy_update(test_sys);
+
     rsx! {
         div {
-            h1 { "Hello, world!" }
+            h1 {
+                if let Some(ref text) = *text.read() {
+                    "{text}"
+                } else {
+                    "Loading..."
+                }
+            }
         }
     }
+}
+
+fn test_sys(_: In<()>) -> Option<String> {
+    Some("Hello, world!".to_string())
 }

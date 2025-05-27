@@ -1,8 +1,10 @@
+use bevy_async_ecs::AsyncEcsPlugin;
 pub use dioxus_core;
 pub use generational_box;
 pub use inventory;
 
 pub mod component;
+pub mod hooks;
 pub mod macros;
 
 mod history;
@@ -13,6 +15,7 @@ pub mod prelude {
     pub use super::WebNode;
     pub use super::{DioxusPlugin, DioxusRoot};
     pub use crate::component::attr;
+    pub use crate::hooks::*;
     pub use crate::macros::elements;
     pub use crate::macros::events;
     pub use dioxus_in_bevy_macros::create_all_elements;
@@ -137,6 +140,9 @@ impl std::fmt::Debug for EventChannels {
     }
 }
 
+#[derive(Resource)]
+pub struct AsyncWorld(pub bevy_async_ecs::AsyncWorld);
+
 fn init_history() {
     if ScopeId::ROOT
         .has_context::<Rc<dyn dioxus::prelude::document::Document>>()
@@ -182,10 +188,14 @@ impl Plugin for DioxusPlugin {
         let builders =
             HashMap::from_iter(inventory::iter::<ComponentBuilder>().map(|b| (b.name, b)));
 
-        app.init_non_send_resource::<DioxusCommands>()
+        app.add_plugins(AsyncEcsPlugin)
+            .init_non_send_resource::<DioxusCommands>()
             .init_non_send_resource::<EventChannels>()
             .insert_resource(DioxusBuilders(builders))
             .add_systems(Update, (setup, render, process_commands));
+
+        let async_world = bevy_async_ecs::AsyncWorld::from_world(app.world_mut());
+        app.insert_resource(AsyncWorld(async_world));
 
         #[cfg(feature = "web")]
         {
@@ -224,7 +234,11 @@ fn setup(
 }
 
 #[cfg(feature = "web")]
-fn setup_web(web_root: NonSendMut<DioxusWebRoot>, windows: Query<&Window>) {
+fn setup_web(
+    web_root: NonSendMut<DioxusWebRoot>,
+    windows: Query<&Window>,
+    async_world: Res<AsyncWorld>,
+) {
     use dioxus::signals::Signal;
     use web_sys::window;
 
@@ -283,6 +297,7 @@ fn setup_web(web_root: NonSendMut<DioxusWebRoot>, windows: Query<&Window>) {
         }
     });
     vdom.provide_root_context(web_root.clone());
+    vdom.provide_root_context(async_world.0.clone());
     let components_signal: Signal<HashMap<Entity, WebNode>> =
         vdom.in_runtime(|| Signal::new_in_scope(HashMap::new(), ScopeId::ROOT));
     *web_root.components.lock().unwrap() = Some(components_signal);
