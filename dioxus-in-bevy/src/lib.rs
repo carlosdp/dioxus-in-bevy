@@ -269,7 +269,7 @@ fn setup_web(
         .unwrap();
     node.set_attribute(
         "style",
-        "width: 100%; height: 100%; position: absolute; top: 0; left: 0;",
+        "width: 100%; height: 100%; position: absolute; top: 0; left: 0; pointer-events: none;",
     )
     .unwrap();
     ui_root.append_child(&node).unwrap();
@@ -290,8 +290,23 @@ fn setup_web(
 
         rsx! {
             div {
+                width: "100%",
+                height: "100%",
+                position: "absolute",
+                top: "0",
+                left: "0",
+
                 for component in components {
-                    {component()}
+                    div {
+                        width: "100%",
+                        height: "100%",
+                        position: "absolute",
+                        top: "0",
+                        left: "0",
+                        display: "flex",
+
+                        {component()}
+                    }
                 }
             }
         }
