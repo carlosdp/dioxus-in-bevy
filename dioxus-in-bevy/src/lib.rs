@@ -59,7 +59,6 @@ pub struct DioxusWebRoot {
 
 #[cfg(feature = "web")]
 #[derive(Clone, Component)]
-#[require(Node)]
 pub struct WebNode {
     pub component: Arc<dyn (Fn() -> Element) + Send + Sync + 'static>,
 }
