@@ -325,15 +325,6 @@ fn synchronize_web_components(
     added: Query<(Entity, &WebNode), Added<WebNode>>,
     mut removed: RemovedComponents<WebNode>,
 ) {
-    for (entity, component) in &added {
-        root.components
-            .lock()
-            .unwrap()
-            .unwrap()
-            .write()
-            .insert(entity, component.clone());
-    }
-
     for entity in removed.read() {
         root.components
             .lock()
@@ -341,6 +332,15 @@ fn synchronize_web_components(
             .unwrap()
             .write()
             .remove(&entity);
+    }
+
+    for (entity, component) in &added {
+        root.components
+            .lock()
+            .unwrap()
+            .unwrap()
+            .write()
+            .insert(entity, component.clone());
     }
 }
 
