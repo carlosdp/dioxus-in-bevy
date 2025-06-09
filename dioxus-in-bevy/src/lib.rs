@@ -1,4 +1,3 @@
-use bevy_async_ecs::AsyncEcsPlugin;
 pub use dioxus_core;
 pub use generational_box;
 pub use inventory;
@@ -6,13 +5,15 @@ pub use inventory;
 pub mod component;
 pub mod hooks;
 pub mod macros;
+#[cfg(feature = "web")]
+pub mod web_node;
 
 mod history;
 mod renderers;
 
 pub mod prelude {
     #[cfg(feature = "web")]
-    pub use super::WebNode;
+    pub use super::web_node::WebNode;
     pub use super::{DioxusPlugin, DioxusRoot};
     pub use crate::component::attr;
     pub use crate::hooks::*;
@@ -32,7 +33,6 @@ use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     rc::Rc,
-    sync::{Arc, Mutex},
 };
 
 use bevy::prelude::*;
@@ -45,30 +45,41 @@ thread_local! {
     pub static RENDERER_CONTEXT: RefCell<DioxusRendererContext> = RefCell::new(DioxusRendererContext::default());
 }
 
+// See [inventory](https://docs.rs/inventory/latest/inventory/#webassembly-and-constructors)
+#[cfg(target_family = "wasm")]
+unsafe extern "C" {
+    fn __wasm_call_ctors();
+}
+
+pub struct DioxusPlugin;
+
+impl Plugin for DioxusPlugin {
+    fn build(&self, app: &mut App) {
+        // See [inventory](https://docs.rs/inventory/latest/inventory/#webassembly-and-constructors)
+        #[cfg(target_family = "wasm")]
+        unsafe {
+            __wasm_call_ctors();
+        }
+
+        let builders =
+            HashMap::from_iter(inventory::iter::<ComponentBuilder>().map(|b| (b.name, b)));
+
+        app.init_non_send_resource::<DioxusCommands>()
+            .init_non_send_resource::<EventChannels>()
+            .insert_resource(DioxusBuilders(builders))
+            .add_systems(Update, (setup, render, process_commands));
+
+        #[cfg(feature = "web")]
+        {
+            app.add_plugins(web_node::setup_plugin);
+        }
+    }
+}
+
 #[derive(Component)]
 pub struct DioxusRoot {
     pub(crate) root: fn() -> Element,
     pub(crate) element_map: HashMap<dioxus_core::ElementId, Entity>,
-}
-
-#[cfg(feature = "web")]
-#[derive(Default, Clone)]
-pub struct DioxusWebRoot {
-    pub(crate) components: Arc<Mutex<Option<Signal<HashMap<Entity, WebNode>>>>>,
-}
-
-#[cfg(feature = "web")]
-#[derive(Clone, Component)]
-pub struct WebNode {
-    pub component: Arc<dyn (Fn() -> Element) + Send + Sync + 'static>,
-}
-
-impl WebNode {
-    pub fn new(component: impl Fn() -> Element + Send + Sync + 'static) -> Self {
-        Self {
-            component: Arc::new(component),
-        }
-    }
 }
 
 impl DioxusRoot {
@@ -139,9 +150,6 @@ impl std::fmt::Debug for EventChannels {
     }
 }
 
-#[derive(Resource)]
-pub struct AsyncWorld(pub bevy_async_ecs::AsyncWorld);
-
 fn init_history() {
     if ScopeId::ROOT
         .has_context::<Rc<dyn dioxus::prelude::document::Document>>()
@@ -164,43 +172,6 @@ fn init_history() {
             let history_provider: Rc<dyn dioxus::prelude::History> =
                 Rc::new(history::web::WebHistory::default());
             ScopeId::ROOT.provide_context(history_provider);
-        }
-    }
-}
-
-// See [inventory](https://docs.rs/inventory/latest/inventory/#webassembly-and-constructors)
-#[cfg(target_family = "wasm")]
-unsafe extern "C" {
-    fn __wasm_call_ctors();
-}
-
-pub struct DioxusPlugin;
-
-impl Plugin for DioxusPlugin {
-    fn build(&self, app: &mut App) {
-        // See [inventory](https://docs.rs/inventory/latest/inventory/#webassembly-and-constructors)
-        #[cfg(target_family = "wasm")]
-        unsafe {
-            __wasm_call_ctors();
-        }
-
-        let builders =
-            HashMap::from_iter(inventory::iter::<ComponentBuilder>().map(|b| (b.name, b)));
-
-        app.add_plugins(AsyncEcsPlugin)
-            .init_non_send_resource::<DioxusCommands>()
-            .init_non_send_resource::<EventChannels>()
-            .insert_resource(DioxusBuilders(builders))
-            .add_systems(Update, (setup, render, process_commands));
-
-        let async_world = bevy_async_ecs::AsyncWorld::from_world(app.world_mut());
-        app.insert_resource(AsyncWorld(async_world));
-
-        #[cfg(feature = "web")]
-        {
-            app.init_non_send_resource::<DioxusWebRoot>()
-                .add_systems(Startup, setup_web)
-                .add_systems(Update, synchronize_web_components);
         }
     }
 }
@@ -229,118 +200,6 @@ fn setup(
         RENDERER_CONTEXT.with_borrow_mut(|context| {
             context.renderers.insert(entity, (vdom, renderer));
         });
-    }
-}
-
-#[cfg(feature = "web")]
-fn setup_web(
-    web_root: NonSendMut<DioxusWebRoot>,
-    windows: Query<&Window>,
-    async_world: Res<AsyncWorld>,
-) {
-    use dioxus::signals::Signal;
-    use web_sys::window;
-
-    let bevy_window = windows.single().unwrap();
-    let canvas = if let Some(ref canvas_selector) = bevy_window.canvas {
-        window()
-            .unwrap()
-            .document()
-            .unwrap()
-            .query_selector(&canvas_selector)
-            .expect("Failed to query canvas selector")
-            .unwrap()
-    } else {
-        window()
-            .unwrap()
-            .document()
-            .unwrap()
-            .query_selector("canvas")
-            .expect("Failed to query canvas selector")
-            .unwrap()
-    };
-    let ui_root = canvas.parent_node().unwrap();
-    let node = window()
-        .unwrap()
-        .document()
-        .unwrap()
-        .create_element("div")
-        .unwrap();
-    node.set_attribute(
-        "style",
-        "width: 100%; height: 100%; position: absolute; top: 0; left: 0; pointer-events: none;",
-    )
-    .unwrap();
-    ui_root.append_child(&node).unwrap();
-
-    let config = dioxus_web::Config::new().rootelement(node);
-    let vdom = VirtualDom::new(move || {
-        let web_root = use_context::<DioxusWebRoot>();
-
-        let components = web_root
-            .components
-            .lock()
-            .unwrap()
-            .unwrap()
-            .read()
-            .iter()
-            .map(|(_, comp)| comp.component.clone())
-            .collect::<Vec<_>>();
-
-        rsx! {
-            div {
-                width: "100%",
-                height: "100%",
-                position: "absolute",
-                top: "0",
-                left: "0",
-
-                for component in components {
-                    div {
-                        width: "100%",
-                        height: "100%",
-                        position: "absolute",
-                        top: "0",
-                        left: "0",
-                        display: "flex",
-
-                        {component()}
-                    }
-                }
-            }
-        }
-    });
-    vdom.provide_root_context(web_root.clone());
-    vdom.provide_root_context(async_world.0.clone());
-    let components_signal: Signal<HashMap<Entity, WebNode>> =
-        vdom.in_runtime(|| Signal::new_in_scope(HashMap::new(), ScopeId::ROOT));
-    *web_root.components.lock().unwrap() = Some(components_signal);
-    // note(carlos): I don't love this, and this sucks because we can't "shut down"
-    // the UI really. But the web dom stuff is all private.
-    dioxus_web::launch::launch_virtual_dom(vdom, config);
-}
-
-fn synchronize_web_components(
-    root: NonSendMut<DioxusWebRoot>,
-    added: Query<(Entity, &WebNode), Added<WebNode>>,
-    mut removed: RemovedComponents<WebNode>,
-) {
-    for entity in removed.read() {
-        root.components
-            .lock()
-            .unwrap()
-            .unwrap()
-            .write()
-            .remove(&entity);
-    }
-
-    for (entity, component) in &added {
-        root.components
-            .lock()
-            .unwrap()
-            .unwrap()
-            .write()
-            .insert(entity, component.clone());
     }
 }
 
