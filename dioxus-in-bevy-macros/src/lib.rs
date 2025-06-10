@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use quote::ToTokens;
 use quote::{format_ident, quote};
 use syn::{
     braced, parse::Parse, parse_macro_input, punctuated::Punctuated, ExprPath, Ident, Token,
@@ -191,4 +192,118 @@ pub fn create_all_elements(input: TokenStream) -> TokenStream {
     };
 
     output.into()
+}
+
+#[proc_macro_attribute]
+pub fn bevy_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Parse the incoming item as a function. We assume the body is valid Rust (e.g. `rsx!{ ... }`).
+    // If parsing fails, just return the original tokens so the compiler can flag the error.
+    let input_fn: syn::ItemFn = match syn::parse(item.clone()) {
+        Ok(func) => func,
+        Err(_) => {
+            return item;
+        }
+    };
+
+    // Keep all attributes except our own and add the #[component] attribute from Dioxus.
+    let mut attrs = input_fn.attrs.clone();
+    attrs.retain(|a| !a.path().is_ident("bevy_component"));
+    attrs.push(syn::parse_quote!(#[component]));
+
+    let vis = &input_fn.vis;
+    let sig = &input_fn.sig;
+
+    // Attempt to extract the inner tokens of an `rsx! {...}` invocation so we can avoid double‐wrapping.
+    let user_tokens: proc_macro2::TokenStream = {
+        // Helper to convert the entire original statements into a token stream (fallback behaviour)
+        let build_fallback = || {
+            let mut ts = proc_macro2::TokenStream::new();
+            for stmt in &input_fn.block.stmts {
+                stmt.to_tokens(&mut ts);
+            }
+            ts
+        };
+
+        if input_fn.block.stmts.len() == 1 {
+            match &input_fn.block.stmts[0] {
+                syn::Stmt::Expr(expr, _) => {
+                    if let syn::Expr::Macro(expr_macro) = expr {
+                        if expr_macro.mac.path.is_ident("rsx") {
+                            let mut iter = expr_macro.mac.tokens.clone().into_iter();
+                            if let Some(proc_macro2::TokenTree::Group(group)) = iter.next() {
+                                group.stream()
+                            } else {
+                                expr_macro.mac.tokens.clone()
+                            }
+                        } else {
+                            build_fallback()
+                        }
+                    } else {
+                        build_fallback()
+                    }
+                }
+                _ => build_fallback(),
+            }
+        } else {
+            build_fallback()
+        }
+    };
+
+    // Generate the new function body modelled after TestBevyComponent
+    let expanded = quote! {
+        #(#attrs)*
+        #vis #sig {
+            use dioxus_in_bevy::prelude::*;
+            use bevy::prelude::*;
+            use dioxus_in_bevy::spawn_detached;
+            #[cfg(feature = "web")]
+            use gloo_timers::future::TimeoutFuture;
+
+            let world = use_bevy_world();
+            let parent = use_bevy_parent();
+            let entity = use_resource({
+                move || async move {
+                    loop {
+                        if let Some(ref world) = *world.read() {
+                            let entity = world.clone().spawn_empty().await.id();
+
+                            if let Some(parent) = parent.parent {
+                                world.clone().entity(entity).insert(ChildOf(parent)).await;
+                            }
+
+                            return entity;
+                        }
+
+                        #[cfg(feature = "web")]
+                        {
+                            TimeoutFuture::new(16).await;
+                        }
+                        // #[cfg(not(feature = "web"))]
+                        // {
+                        //     // Yield execution on native platforms
+                        //     std::thread::sleep(std::time::Duration::from_millis(16));
+                        // }
+                    }
+                }
+            })
+            .suspend()?;
+            let entity = entity.cloned();
+
+            use_context_provider(move || BevyParent::new(entity));
+
+            use_drop(move || {
+                spawn_detached(async move {
+                    if let Some(ref world) = *world.read() {
+                        world.entity(entity).despawn().await;
+                    }
+                })
+            });
+
+            {
+                #user_tokens
+            }
+        }
+    };
+
+    expanded.into()
 }

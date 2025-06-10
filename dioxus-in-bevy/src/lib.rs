@@ -20,9 +20,11 @@ pub mod prelude {
     pub use crate::macros::elements;
     pub use crate::macros::events;
     pub use crate::root::{BevyApp, BevyParent, DioxusNode};
+    pub use dioxus_in_bevy_macros::bevy_component;
     pub use dioxus_in_bevy_macros::create_all_elements;
 }
 
+pub use dioxus_in_bevy_macros::bevy_component;
 pub use dioxus_in_bevy_macros::dioxus_elements;
 pub use paste;
 
@@ -52,4 +54,21 @@ impl Plugin for DioxusPlugin {
             app.add_plugins(web_node::setup_plugin);
         }
     }
+}
+
+/// Spawn a future on the appropriate runtime without blocking the current task.
+///
+/// On WebAssembly targets this uses `wasm_bindgen_futures::spawn_local`. On
+/// native targets it spawns a new OS thread and blocks on the future. This keeps
+/// the implementation lightweight without pulling in an async runtime
+/// dependency.
+#[cfg(target_arch = "wasm32")]
+pub fn spawn_detached(fut: impl std::future::Future<Output = ()> + 'static) {
+    use wasm_bindgen_futures::spawn_local;
+    spawn_local(fut);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn spawn_detached(fut: impl std::future::Future<Output = ()> + 'static) {
+    tokio::task::spawn_local(fut);
 }

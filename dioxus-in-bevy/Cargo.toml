@@ -35,5 +35,8 @@ web-sys = { version = "0.3", optional = true }
 js-sys = { version = "0.3", optional = true }
 gloo-timers = { version = "0.3", features = ["futures"], optional = true }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+
 [dev-dependencies]
 bevy = "0.16"

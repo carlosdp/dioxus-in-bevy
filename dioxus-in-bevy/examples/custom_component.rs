@@ -39,32 +39,8 @@ fn TestWebComponent() -> Element {
     }
 }
 
-#[component]
+#[bevy_component]
 fn TestBevyContainer(children: Element) -> Element {
-    let world = use_bevy_world();
-    let parent = use_bevy_parent();
-    let entity = use_resource({
-        move || async move {
-            loop {
-                if let Some(ref world) = *world.read() {
-                    let entity = world.clone().spawn_empty().await.id();
-
-                    if let Some(parent) = parent.parent {
-                        world.clone().entity(entity).insert(ChildOf(parent)).await;
-                    }
-
-                    return entity;
-                }
-
-                gloo_timers::future::TimeoutFuture::new(16).await;
-            }
-        }
-    })
-    .suspend()?;
-    let entity = entity.cloned();
-
-    use_context_provider(move || BevyParent::new(entity));
-
     use_effect({
         move || {
             spawn_detached(async move {
@@ -84,45 +60,13 @@ fn TestBevyContainer(children: Element) -> Element {
         }
     });
 
-    use_drop(move || {
-        spawn_detached(async move {
-            if let Some(ref world) = *world.read() {
-                world.entity(entity).despawn().await;
-            }
-        })
-    });
-
     rsx! {
         {children}
     }
 }
 
-#[component]
+#[bevy_component]
 fn TestBevyComponent(children: Element) -> Element {
-    let world = use_bevy_world();
-    let parent = use_bevy_parent();
-    let entity = use_resource({
-        move || async move {
-            loop {
-                if let Some(ref world) = *world.read() {
-                    let entity = world.clone().spawn_empty().await.id();
-
-                    if let Some(parent) = parent.parent {
-                        world.clone().entity(entity).insert(ChildOf(parent)).await;
-                    }
-
-                    return entity;
-                }
-
-                gloo_timers::future::TimeoutFuture::new(16).await;
-            }
-        }
-    })
-    .suspend()?;
-    let entity = entity.cloned();
-
-    use_context_provider(move || BevyParent::new(entity));
-
     use_effect({
         move || {
             spawn_detached(async move {
@@ -135,27 +79,7 @@ fn TestBevyComponent(children: Element) -> Element {
         }
     });
 
-    use_drop(move || {
-        spawn_detached(async move {
-            if let Some(ref world) = *world.read() {
-                world.entity(entity).despawn().await;
-            }
-        })
-    });
-
     rsx! {
         {children}
     }
 }
-
-// spawn.rs
-// #[cfg(target_arch = "wasm32")]
-pub fn spawn_detached(fut: impl std::future::Future<Output = ()> + 'static) {
-    use wasm_bindgen_futures::spawn_local;
-    spawn_local(fut);
-}
-
-// #[cfg(not(target_arch = "wasm32"))]
-// pub fn spawn_detached(fut: impl std::future::Future<Output = ()> + Send + 'static) {
-//     tokio::spawn(fut);
-// }
