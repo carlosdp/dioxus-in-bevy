@@ -154,7 +154,7 @@ macro_rules! events {
                     | {
                         world.entity_mut(entity).observe(move |$($event_param: $event_type),*, _windows: NonSend<bevy::winit::WinitWindows>| {
                             let event_return = { $event_body };
-                            $crate::RENDERER_CONTEXT.with_borrow(|context| {
+                            $crate::native::RENDERER_CONTEXT.with_borrow(|context| {
                                 if let Some((vdom, _)) = context.renderers.get(&root_entity) {
                                     let runtime = vdom.runtime();
                                     let event_name = if stringify!($event_name).starts_with("on") { stringify!($event_name)[2..].to_string() } else { stringify!($event_name).to_string() };

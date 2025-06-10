@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use dioxus::prelude::*;
+use dioxus_in_bevy::native::DioxusRoot;
 use dioxus_in_bevy::prelude::*;
 
 dioxus_in_bevy::elements! {

@@ -4,7 +4,8 @@ use std::{
 };
 
 use crate::{
-    component::EventHandlerInstaller, DioxusBuilders, DioxusRoot, ElementTag, EventChannels,
+    component::EventHandlerInstaller,
+    native::{DioxusBuilders, DioxusRoot, ElementTag, EventChannels},
 };
 use bevy::prelude::*;
 use dioxus_core::{AttributeValue, TemplateAttribute, TemplateNode, WriteMutations};
