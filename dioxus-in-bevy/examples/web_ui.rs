@@ -12,7 +12,7 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2d::default());
-    commands.spawn(WebNode::new(App));
+    commands.spawn(DioxusNode::new(App));
 }
 
 #[component]

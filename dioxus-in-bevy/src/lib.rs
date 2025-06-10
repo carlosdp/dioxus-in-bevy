@@ -10,15 +10,15 @@ pub mod web_node;
 
 mod history;
 mod renderers;
+mod root;
 
 pub mod prelude {
-    #[cfg(feature = "web")]
-    pub use super::web_node::WebNode;
     pub use super::{DioxusPlugin, DioxusRoot};
     pub use crate::component::attr;
     pub use crate::hooks::*;
     pub use crate::macros::elements;
     pub use crate::macros::events;
+    pub use crate::root::{BevyApp, BevyParent, DioxusNode};
     pub use dioxus_in_bevy_macros::create_all_elements;
 }
 
@@ -67,7 +67,8 @@ impl Plugin for DioxusPlugin {
         app.init_non_send_resource::<DioxusCommands>()
             .init_non_send_resource::<EventChannels>()
             .insert_resource(DioxusBuilders(builders))
-            .add_systems(Update, (setup, render, process_commands));
+            .add_systems(Update, (setup, render, process_commands))
+            .add_plugins(root::setup_plugin);
 
         #[cfg(feature = "web")]
         {

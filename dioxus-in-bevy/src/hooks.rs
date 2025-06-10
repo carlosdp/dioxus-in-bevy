@@ -2,8 +2,10 @@ use bevy::ecs::system::{In, IntoSystem};
 use bevy_async_ecs::AsyncWorld;
 use dioxus::prelude::*;
 
-pub fn use_bevy_world() -> AsyncWorld {
-    use_context::<AsyncWorld>()
+use crate::root::BevyParent;
+
+pub fn use_bevy_world() -> Signal<Option<AsyncWorld>> {
+    use_context::<Signal<Option<AsyncWorld>>>()
 }
 
 // TODO: I don't love this approach. We should re-engineer so we don't need the unecessary In<>,
@@ -25,21 +27,27 @@ pub fn use_bevy_update<
             let world = world.clone();
             let system = system.clone();
             async move {
-                let sys = world.register_io_system(system).await;
+                if let Some(ref world) = *world.read() {
+                    let sys = world.register_io_system(system).await;
 
-                loop {
-                    let out = sys.run(()).await;
+                    loop {
+                        let out = sys.run(()).await;
 
-                    if out.is_some() {
-                        signal.replace(out);
+                        if out.is_some() {
+                            signal.replace(out);
+                        }
+
+                        #[cfg(feature = "web")]
+                        gloo_timers::future::TimeoutFuture::new(16).await;
                     }
-
-                    #[cfg(feature = "web")]
-                    gloo_timers::future::TimeoutFuture::new(16).await;
                 }
             }
         }
     });
 
     signal
+}
+
+pub fn use_bevy_parent() -> BevyParent {
+    use_context::<BevyParent>()
 }
