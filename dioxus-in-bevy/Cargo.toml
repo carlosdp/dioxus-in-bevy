@@ -17,7 +17,7 @@ web = [
 [dependencies]
 dioxus-in-bevy-macros = { path = "../dioxus-in-bevy-macros" }
 paste = "1"
-bevy = { version = "0.16", default-features = false, features = ["bevy_ui"] }
+bevy = { version = "0.16", default-features = false, features = ["bevy_ui", "bevy_window"] }
 bevy-async-ecs = "0.8"
 dioxus = "0.6"
 dioxus-core = "0.6"
