@@ -14,7 +14,7 @@ fn setup(mut commands: Commands) {
 fn bevy_app() -> bevy::prelude::App {
     let mut app = bevy::prelude::App::new();
     app.add_plugins(DefaultPlugins)
-        .add_plugins(DioxusPlugin)
+        .add_plugins(DioxusPlugin::default())
         .add_systems(Startup, setup);
     app
 }
@@ -43,20 +43,22 @@ fn TestWebComponent() -> Element {
 fn TestBevyContainer(children: Element) -> Element {
     use_effect({
         move || {
-            spawn_detached(async move {
-                world()
-                    .unwrap()
-                    .entity(entity)
-                    .insert((
-                        Node {
-                            width: Val::Px(100.0),
-                            height: Val::Px(100.0),
-                            ..Default::default()
-                        },
-                        BackgroundColor(Color::BLACK),
-                    ))
-                    .await;
-            })
+            if let Some(entity) = entity() {
+                spawn(async move {
+                    world()
+                        .unwrap()
+                        .entity(entity)
+                        .insert((
+                            Node {
+                                width: Val::Px(100.0),
+                                height: Val::Px(100.0),
+                                ..Default::default()
+                            },
+                            BackgroundColor(Color::BLACK),
+                        ))
+                        .await;
+                });
+            }
         }
     });
 
@@ -69,13 +71,15 @@ fn TestBevyContainer(children: Element) -> Element {
 fn TestBevyComponent(children: Element) -> Element {
     use_effect({
         move || {
-            spawn_detached(async move {
-                world()
-                    .unwrap()
-                    .entity(entity)
-                    .insert(Text::new("HELLO WORLD"))
-                    .await;
-            })
+            if let Some(entity) = entity() {
+                spawn(async move {
+                    world()
+                        .unwrap()
+                        .entity(entity)
+                        .insert(Text::new("HELLO WORLD"))
+                        .await;
+                });
+            }
         }
     });
 

@@ -48,7 +48,7 @@ dioxus_in_bevy::dioxus_elements! {
 fn main() {
     bevy::prelude::App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(DioxusPlugin)
+        .add_plugins(DioxusPlugin::default())
         .add_systems(Startup, setup)
         .run();
 }

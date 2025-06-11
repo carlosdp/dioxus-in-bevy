@@ -48,6 +48,6 @@ pub fn use_bevy_update<
     signal
 }
 
-pub fn use_bevy_parent() -> BevyParent {
-    use_context::<BevyParent>()
+pub fn use_bevy_parent() -> Signal<BevyParent> {
+    use_context::<Signal<BevyParent>>()
 }

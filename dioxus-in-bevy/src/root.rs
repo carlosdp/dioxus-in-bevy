@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    ops::Deref,
     sync::{Arc, Mutex},
 };
 
@@ -7,6 +8,7 @@ use bevy::prelude::*;
 use bevy_async_ecs::AsyncWorld;
 use dioxus::prelude::*;
 
+#[cfg(feature = "web")]
 use crate::web_node::Overlay;
 
 pub(crate) fn setup_plugin(app: &mut App) {
@@ -38,10 +40,16 @@ pub struct BevyParent {
 }
 
 impl BevyParent {
-    pub fn new(parent: Entity) -> Self {
-        Self {
-            parent: Some(parent),
-        }
+    pub fn new(parent: Option<Entity>) -> Self {
+        Self { parent }
+    }
+}
+
+impl Deref for BevyParent {
+    type Target = Option<Entity>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.parent
     }
 }
 
@@ -50,7 +58,9 @@ pub fn BevyApp(builder: Option<Box<fn() -> App>>, children: Element) -> Element 
     let mut async_world = use_signal::<Option<AsyncWorld>>(|| None);
     let components = use_signal::<ComponentMap>(HashMap::new);
 
-    use_context_provider(BevyParent::default);
+    let parent = use_signal(BevyParent::default);
+
+    use_context_provider(|| parent);
     use_context_provider(|| components);
     use_context_provider(|| async_world);
 
@@ -86,7 +96,7 @@ pub fn BevyApp(builder: Option<Box<fn() -> App>>, children: Element) -> Element 
 
             Overlay {}
 
-            div { style: "width: 100%; height: 100%; position: absolute; top: 0; left: 0;",
+            div { style: "width: 100%; height: 100%; position: absolute; top: 0; left: 0; pointer-events: none;",
                 {children}
             }
         }

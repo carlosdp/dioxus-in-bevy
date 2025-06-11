@@ -1,17 +1,12 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use bevy_async_ecs::{AsyncEcsPlugin, AsyncWorld};
+use bevy_async_ecs::AsyncWorld;
 use dioxus::prelude::*;
 
 use crate::root::{ComponentMap, DioxusRoot};
 
-pub(crate) fn setup_plugin(app: &mut App) {
-    app.add_plugins(AsyncEcsPlugin)
-        .add_systems(Startup, setup_web);
-}
-
-fn setup_web(world: &mut World) {
+pub(crate) fn setup_web_overlay(world: &mut World) {
     use dioxus::signals::Signal;
     use web_sys::window;
 
@@ -73,6 +68,7 @@ pub fn Overlay() -> Element {
         .iter()
         .map(|(_, comp)| comp.component.clone())
         .collect::<Vec<_>>();
+    tracing::info!("OVERLAY components: {}", components.len());
 
     rsx! {
         div {
@@ -81,6 +77,8 @@ pub fn Overlay() -> Element {
             position: "absolute",
             top: "0",
             left: "0",
+            pointer_events: "none",
+            id: "overlay",
 
             for component in components {
                 div {

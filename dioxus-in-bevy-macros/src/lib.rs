@@ -253,9 +253,9 @@ pub fn bevy_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #(#attrs)*
         #vis #sig {
+            use dioxus::prelude::*;
             use dioxus_in_bevy::prelude::*;
             use bevy::prelude::*;
-            use dioxus_in_bevy::spawn_detached;
             #[cfg(feature = "web")]
             use gloo_timers::future::TimeoutFuture;
 
@@ -267,7 +267,7 @@ pub fn bevy_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         if let Some(ref world) = *world.read() {
                             let entity = world.clone().spawn_empty().await.id();
 
-                            if let Some(parent) = parent.parent {
+                            if let Some(parent) = *parent() {
                                 world.clone().entity(entity).insert(ChildOf(parent)).await;
                             }
 
@@ -278,29 +278,33 @@ pub fn bevy_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         {
                             TimeoutFuture::new(16).await;
                         }
-                        // #[cfg(not(feature = "web"))]
-                        // {
-                        //     // Yield execution on native platforms
-                        //     std::thread::sleep(std::time::Duration::from_millis(16));
-                        // }
+                        #[cfg(not(feature = "web"))]
+                        {
+                            // Yield execution on native platforms
+                            std::thread::sleep(std::time::Duration::from_millis(16));
+                        }
                     }
                 }
-            })
-            .suspend()?;
-            let entity = entity.cloned();
-
-            use_context_provider(move || BevyParent::new(entity));
-
-            use_drop(move || {
-                spawn_detached(async move {
-                    if let Some(ref world) = *world.read() {
-                        world.entity(entity).despawn().await;
-                    }
-                })
             });
 
-            {
+            let parent = use_signal(move || BevyParent::new(entity()));
+
+            use_context_provider(move || parent);
+
+            use_drop(move || {
+                spawn(async move {
+                    if let Some(ref world) = *world.read() {
+                        if let Some(entity) = entity() {
+                            world.entity(entity).despawn().await;
+                        }
+                    }
+                });
+            });
+
+            if world.read().is_some() {
                 #user_tokens
+            } else {
+                Ok(VNode::placeholder())
             }
         }
     };

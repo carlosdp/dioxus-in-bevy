@@ -5,7 +5,7 @@ use dioxus_in_bevy::prelude::*;
 fn main() {
     bevy::prelude::App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(DioxusPlugin)
+        .add_plugins(DioxusPlugin::default())
         .add_systems(Startup, setup)
         .run();
 }

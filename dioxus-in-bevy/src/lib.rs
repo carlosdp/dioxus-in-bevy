@@ -29,6 +29,7 @@ pub use dioxus_in_bevy_macros::dioxus_elements;
 pub use paste;
 
 use bevy::prelude::*;
+use bevy_async_ecs::AsyncEcsPlugin;
 
 // See [inventory](https://docs.rs/inventory/latest/inventory/#webassembly-and-constructors)
 #[cfg(target_family = "wasm")]
@@ -36,7 +37,10 @@ unsafe extern "C" {
     fn __wasm_call_ctors();
 }
 
-pub struct DioxusPlugin;
+#[derive(Default)]
+pub struct DioxusPlugin {
+    enable_overlay: bool,
+}
 
 impl Plugin for DioxusPlugin {
     fn build(&self, app: &mut App) {
@@ -46,29 +50,15 @@ impl Plugin for DioxusPlugin {
             __wasm_call_ctors();
         }
 
-        app.add_plugins(native::setup_plugin)
+        app.add_plugins(AsyncEcsPlugin)
+            .add_plugins(native::setup_plugin)
             .add_plugins(root::setup_plugin);
 
         #[cfg(feature = "web")]
         {
-            app.add_plugins(web_node::setup_plugin);
+            if self.enable_overlay {
+                app.add_systems(Startup, web_node::setup_web_overlay);
+            }
         }
     }
-}
-
-/// Spawn a future on the appropriate runtime without blocking the current task.
-///
-/// On WebAssembly targets this uses `wasm_bindgen_futures::spawn_local`. On
-/// native targets it spawns a new OS thread and blocks on the future. This keeps
-/// the implementation lightweight without pulling in an async runtime
-/// dependency.
-#[cfg(target_arch = "wasm32")]
-pub fn spawn_detached(fut: impl std::future::Future<Output = ()> + 'static) {
-    use wasm_bindgen_futures::spawn_local;
-    spawn_local(fut);
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn spawn_detached(fut: impl std::future::Future<Output = ()> + 'static) {
-    tokio::task::spawn_local(fut);
 }
