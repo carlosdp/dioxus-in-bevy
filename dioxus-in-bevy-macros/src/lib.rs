@@ -261,6 +261,8 @@ pub fn bevy_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             let world = use_bevy_world();
             let parent = use_bevy_parent();
+            let mut _parent = use_signal(|| BevyParent::new(None));
+
             let entity = use_resource({
                 move || async move {
                     loop {
@@ -270,6 +272,8 @@ pub fn bevy_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             if let Some(parent) = *parent() {
                                 world.clone().entity(entity).insert(ChildOf(parent)).await;
                             }
+
+                            _parent.set(BevyParent::new(Some(entity)));
 
                             return entity;
                         }
@@ -287,18 +291,16 @@ pub fn bevy_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             });
 
-            let parent = use_signal(move || BevyParent::new(entity()));
-
-            use_context_provider(move || parent);
+            use_context_provider(move || _parent);
 
             use_drop(move || {
-                spawn(async move {
-                    if let Some(ref world) = *world.read() {
-                        if let Some(entity) = entity() {
+                if let Some(world) = world() {
+                    if let Some(entity) = entity() {
+                        spawn_forever(async move {
                             world.entity(entity).despawn().await;
-                        }
+                        });
                     }
-                });
+                }
             });
 
             if world.read().is_some() {

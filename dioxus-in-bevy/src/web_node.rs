@@ -68,7 +68,6 @@ pub fn Overlay() -> Element {
         .iter()
         .map(|(_, comp)| comp.component.clone())
         .collect::<Vec<_>>();
-    tracing::info!("OVERLAY components: {}", components.len());
 
     rsx! {
         div {

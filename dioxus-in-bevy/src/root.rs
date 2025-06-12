@@ -34,7 +34,7 @@ impl DioxusNode {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct BevyParent {
     pub parent: Option<Entity>,
 }
