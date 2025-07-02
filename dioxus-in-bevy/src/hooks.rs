@@ -1,5 +1,5 @@
 use bevy::ecs::system::{In, IntoSystem};
-use bevy_async_ecs::AsyncWorld;
+use bevy_async_ecs::{AsyncIOSystem, AsyncWorld};
 use dioxus::prelude::*;
 
 use crate::root::BevyParent;
@@ -41,6 +41,29 @@ pub fn use_bevy_update<
                         gloo_timers::future::TimeoutFuture::new(16).await;
                     }
                 }
+            }
+        }
+    });
+
+    signal
+}
+
+pub fn use_bevy_system<
+    I: Send + 'static,
+    O: Send + 'static,
+    M,
+    S: IntoSystem<In<I>, O, M> + Clone + Send + 'static,
+>(
+    system: S,
+) -> Resource<AsyncIOSystem<I, O>> {
+    let world = use_bevy_world();
+    let signal = use_resource({
+        move || {
+            let system = system.clone();
+
+            async move {
+                let world = world().unwrap();
+                world.register_io_system(system).await
             }
         }
     });
